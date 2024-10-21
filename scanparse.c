@@ -121,6 +121,22 @@ int make_lines(DummyHead * hp) {
     return 0;
 }
 
+// /**
+//  * Insert a bucket after the head of a
+//  * double circularly linked list.
+//  */
+// void add_line(DummyHead * hp, struct IRLine * bp) {
+//     struct IRLine *target = (struct IRLine *) hp;
+//     struct IRLine *temp = target->next;
+
+//     temp->prev = bp;
+//     bp->next = temp;
+//     bp->prev = target;
+//     target->next = bp;
+
+//     hp->line_count++;
+// }
+
 /**
  * Insert a bucket after the head of a
  * double circularly linked list.
@@ -137,9 +153,25 @@ void add_line(DummyHead * hp, struct IRLine * bp) {
     hp->line_count++;
 }
 
-// i suspect that oldest isn't getting set properly
+void add_line_after(DummyHead * hp, void *bp, struct IRLine *p) {
+    struct IRLine *target = (struct IRLine *) bp;
+    struct IRLine *temp = target->next;
 
-// TODO: For next assignment, will need to make remove general case
+    temp->prev = p;
+    p->next = temp;
+    p->prev = target;
+    target->next = p;
+
+    hp->line_count++;
+}
+
+struct IRLine* remove_line_new(DummyHead * hp, void *bp) {
+    struct IRLine *to_remove = (struct IRLine *) bp;
+	to_remove->prev->next = to_remove->next;
+	to_remove->next->prev = to_remove->prev;
+    hp->line_count--;
+    return to_remove;
+}
 
 /**
  * Remove the oldest bucket from a
@@ -155,6 +187,8 @@ struct IRLine* remove_line(DummyHead * hp) {
     hp->line_count--;
     return temp;
 }
+
+
 
 // only gets address,
 struct IRLine* get_next_IR(StateIR* ir) {
@@ -175,15 +209,10 @@ void state_destruct(StateIR* self) {
 }
 
 /* Function to format printing an IR Block Nicely(TM)*/
-void print_ir(StateIR* ir) {
+void print_sr(StateIR* ir) {
     uint32_t total = ir->groups[1].line_count;
     struct IRLine* line = ir->groups[1].oldest;
-    // printf("dummy head adr: %p\n", &ir->groups[1]);
-    // printf("newest line: %p\n", ir->groups[1].newest);
-    // printf("oldest line: %p\n", ir->groups[1].oldest);
     for (uint32_t i = 0; i < total; ++i) {
-        // printf("next line: %p\n", line->next);
-        // printf("prev line: %p\n", line->prev);
         // Add code that reads each of the ops and converts as needed.
         switch(line->opcode) {
             case nop:
