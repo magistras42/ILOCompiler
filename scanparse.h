@@ -105,7 +105,6 @@ typedef struct {
 typedef struct {
     uint32_t largest_group;
     DummyHead* groups;
-    // IRLine* lines;
 } StateIR;
 
 typedef struct {
@@ -113,7 +112,6 @@ typedef struct {
     uint32_t line_index;
     uint8_t eof_found;
     FILE* file;
-    //char buf[BUF_SIZE];
     StateIR* ir;
 } ctx;
 
@@ -134,8 +132,11 @@ void print_error(uint32_t line_num, uint32_t reason);
 int init_IR(StateIR* self);
 int make_lines(DummyHead * hp);
 void add_line(DummyHead * hp, struct IRLine * bp);
+void add_line_after(DummyHead * hp, void *bp, struct IRLine *p);
 struct IRLine* remove_line(DummyHead * hp);
+struct IRLine* remove_line_new(DummyHead *hp, struct IRLine *bp);
 void state_destruct(StateIR* self);
-void print_ir(StateIR* ir);
+void print_sr(StateIR* ir);
+struct IRLine* get_next_IR(StateIR* ir);
 
 #endif
