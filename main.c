@@ -22,36 +22,43 @@ int main(int argc, char **argv) {
     // Flags and their values
     uint8_t hflag = 0;
     uint8_t xflag = 0;
+    uint8_t kflag = 0;
     uint8_t flags = 0;
-
-    extern char *optarg;
-    extern int optind, optopt;
     
     int status = 0;
-    int arg;
+    uint32_t k;
     ctx* context;
     StateIR* ir;
+    Alloc_State* all;
     char *filename;
 
-    while ((arg = getopt(argc, argv, ":hx")) != -1) {
-    switch(arg) {
-        case 'h':
-            hflag++;
-            flags++;
+    // Check arguments
+    for (int i = 1; i < argc; i+=2) {
+        char* cop = argv[i];
+        if (cop[0] == '-') {
+            
+            if (strchr(cop, 'x')) {
+                xflag = i;
+            }
+            if (strchr(cop, 'h')) {
+                hflag = i;
+            }
+        } else if (i == 1 && argc == 2) {
             break;
-        case 'x':
-            xflag++;
-            flags++;
+        } else {
+            if (!kflag) {
+                k = atoi(cop);
+                if (k >= 3 && k <= 64) {
+                    kflag = i;
+                    continue;
+                }
+            }
+            fprintf(stderr, "ERROR: Bad arguments\n");
+            hflag = 1;
             break;
-        case '?':
-            fprintf(stderr, "Unrecognized option: -%c\n", optopt);
-            print_help();
-            status = -1;
-            return status;
         }
     }
 
-    // could check if filename uninitialized, if not then do this?
     filename = argv[argc - 1];
 
     if (flags > 1) {
@@ -100,7 +107,6 @@ int main(int argc, char **argv) {
     if (xflag) {
         if ((status = parse(context)) >= 0) {
             if ((status = rename_reg(context->ir)) >= 0) {
-                // printf("here!\n");
                 print_vr(context->ir);
                 fclose(context->file);
                 return 0;
@@ -113,6 +119,36 @@ int main(int argc, char **argv) {
     }
 
     // TODO: code for lab2
+
+    // Initialize Alloc Representation
+    all = (Alloc_State*) malloc(sizeof(Alloc_State));
+    if (all == NULL) {
+        fprintf(stderr, "ERROR: Failed to initialize Alloc State\n");
+        fclose(context->file);
+        return -1;
+    }
+
+    if (kflag) {
+        // printf("in kflag\n");
+        if ((status = parse(context)) >= 0) {
+            int max_vr;
+            if ((max_vr = rename_reg(context->ir)) >= 0) {
+                // printf("here!\n");
+                uint32_t max2 = (uint32_t) max_vr;
+
+                if (!(status = init_alloc(all, context->ir, max2, k))) {
+                    reallocate(all, max_vr);
+                    print_pr(context->ir);
+                    fclose(context->file);
+                    return 0;
+                }
+            }
+            printf("Failed to allocate intermediate arrays, run terminates.\n");
+        }
+        printf("Due to the syntax error, run terminates.\n");
+        fclose(context->file);
+        return status;
+    }
 
     // Close open file
     fclose(context->file);
