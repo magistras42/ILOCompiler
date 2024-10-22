@@ -165,12 +165,27 @@ void add_line_after(DummyHead * hp, void *bp, struct IRLine *p) {
     hp->line_count++;
 }
 
-struct IRLine* remove_line_new(DummyHead * hp, void *bp) {
-    struct IRLine *to_remove = (struct IRLine *) bp;
-	to_remove->prev->next = to_remove->next;
-	to_remove->next->prev = to_remove->prev;
+struct IRLine* remove_line_new(DummyHead * hp, struct IRLine *bp) {
+
+    if (bp->prev == (struct IRLine *) hp) {
+        hp->oldest = bp->next;
+        bp->next->prev = (struct IRLine *) hp;
+
+        bp->next = NULL;
+        bp->prev = NULL;
+
+        hp->line_count--;
+        return bp;
+    }
+
+	bp->prev->next = bp->next;
+	bp->next->prev = bp->prev;
+
+    bp->next = NULL;
+    bp->prev = NULL;
+
     hp->line_count--;
-    return to_remove;
+    return bp;
 }
 
 /**
