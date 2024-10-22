@@ -156,7 +156,6 @@ int rename_reg(StateIR* ir) {
         for (int i = 0; i <= max_sr; ++i) {
                 sr_to_vr[i] = UINT32_MAX;
                 last_updated[i] = UINT32_MAX;
-                //printf("%i\n", i);
         }
 
         // For each Op in block, bottom to top
@@ -266,7 +265,6 @@ int rename_reg(StateIR* ir) {
 
                 // For each operand O that line uses
                         // last_updated[O.sr] = index (done above)
-                // printf("got to end of iteration of line %d\n", i);
 
                 // Calculate number of live registers
                 cur_live = 0;
@@ -320,10 +318,11 @@ int init_alloc(Alloc_State* ctx, StateIR* ir, uint32_t max_vr, uint32_t max_pr) 
         ctx->pr_stack = (uint32_t *) malloc(pr_memory);
         ctx->prnu = (uint32_t *) malloc(pr_memory);
 
-        // Allocate vr_to_pr and vr_to_spill
+        // Allocate vr_to_pr, vr_to_spill, vr_to_def
         uint64_t vr_memory = (sizeof(uint32_t) * max_vr);
         ctx->vr_to_pr = (uint32_t *) malloc(vr_memory);
         ctx->vr_to_spill = (uint32_t *) malloc(vr_memory);
+        ctx->vr_to_def = (uint32_t *) malloc(vr_memory);
 
         // Memory safety
         if (ctx->pr_stack == NULL || ctx->pr_to_vr == NULL || ctx->prnu == NULL || ctx->vr_to_pr == NULL || ctx->vr_to_spill == NULL) {
@@ -340,7 +339,9 @@ int init_alloc(Alloc_State* ctx, StateIR* ir, uint32_t max_vr, uint32_t max_pr) 
         // Initialize vr-indexed maps
         for (int i = 0; i < max_vr; i++) {
                 ctx->vr_to_pr[i] = UINT32_MAX;
+                // TODO: Should this just be INVALID???
                 ctx->vr_to_spill[i] = 0;
+                ctx->vr_to_def[i] = 0;
         }
         return status;
 }
@@ -352,6 +353,7 @@ void reallocate(Alloc_State* ctx, uint32_t max_vr) {
         // In main, call init_alloc
         uint32_t total = ctx->total_lines;
         struct IRLine* line;
+        struct IRLine* temp;
 
         while (ctx->index < total) {
                 op* o1;
@@ -372,45 +374,49 @@ void reallocate(Alloc_State* ctx, uint32_t max_vr) {
                         continue;
                 }
 
-                // First pass at allocation - assign everything can without checking conflicts.
-                switch (line->opcode) {
-                        // NOTE: everything but loadI has register for op1
-                        case loadI:
-                                break;
-                        case load:
-                                // op1
-                                o1 = &(line->op1);
-                                pr1 = ctx->vr_to_pr[o1->vr];
-                                // If pr invalid, restore
-                                if (pr1 == UINT32_MAX) {
-                                        o1->pr = get_a_pr(ctx, o1->vr, o1->nu, INVALID);
-                                        if (ctx->vr_to_spill[o1->vr] >= 32768) {
-                                                // printf("restoring\n");
-                                                restore(ctx, o1->vr, o1->pr);
-                                        }
-                                // Otherwise, update o1's pr
+                // op1
+                if (line->opcode != loadI) {
+                        o1 = &(line->op1);
+                        pr1 = ctx->vr_to_pr[o1->vr];
+                        // If pr invalid, restore
+                        if (pr1 == UINT32_MAX) {
+                                o1->pr = get_a_pr(ctx, o1->vr, o1->nu, INVALID);
+                                if (ctx->vr_to_spill[o1->vr] >= 32768) {
+                                        restore(ctx, o1->vr, o1->pr);
+                                } else if (ctx->vr_to_spill[o1->vr] == INVALID) {
+                                        remat(ctx, o1->vr, o1->pr);
                                 } else {
-                                        o1->pr = pr1;
-                                        ctx->prnu[pr1] = o1->nu;
+                                        // fprintf(stderr, "ERROR: o1 VR_TO_SPILL problem, something wrong with spill.\n");
                                 }
-                                // op3
+                        // Otherwise, update o1's pr
+                        } else {
+                                o1->pr = pr1;
+                                ctx->prnu[pr1] = o1->nu;
+                        }
 
-                                break;
-                        case store:
-                                // op1
-                                o1 = &(line->op1);
-                                pr1 = ctx->vr_to_pr[o1->vr];
-                                // If pr invalid, restore
-                                if (pr1 == UINT32_MAX) {
-                                        o1->pr = get_a_pr(ctx, o1->vr, o1->nu, INVALID);
-                                        if (ctx->vr_to_spill[o1->vr] >= 32768) {
-                                                restore(ctx, o1->vr, o1->pr);
+                        // op2 and op3
+                        if (line->opcode != store) {
+                                // op2
+                                if (line->opcode != load) {                               
+                                        o2 = &(line->op2);
+                                        pr2 = ctx->vr_to_pr[o2->vr];
+                                        // If pr invalid, restore
+                                        if (pr2 == UINT32_MAX) {
+                                                o2->pr = get_a_pr(ctx, o2->vr, o2->nu, o1->pr);
+                                                if (ctx->vr_to_spill[o2->vr] >= 32768) {
+                                                        restore(ctx, o2->vr, o2->pr);
+                                                } else if (ctx->vr_to_spill[o2->vr] == INVALID) {
+                                                        remat(ctx, o2->vr, o2->pr);
+                                                } else {
+                                                        // fprintf(stderr, "ERROR: o2 VR_TO_SPILL problem, something wrong with spill.\n");
+                                                }
+                                        // Otherwise, update o2's pr
+                                        } else {
+                                                o2->pr = pr2;
+                                                ctx->prnu[pr2] = o2->nu;
                                         }
-                                // Otherwise, update o1's pr
-                                } else {
-                                        o1->pr = pr1;
-                                        ctx->prnu[pr1] = o1->nu;
                                 }
+                        } else {
                                 // op3
                                 o3 = &(line->op3);
                                 pr3 = ctx->vr_to_pr[o3->vr];
@@ -419,47 +425,17 @@ void reallocate(Alloc_State* ctx, uint32_t max_vr) {
                                         o3->pr = get_a_pr(ctx, o3->vr, o3->nu, o1->pr);
                                         if (ctx->vr_to_spill[o3->vr] >= 32768) {
                                                 restore(ctx, o3->vr, o3->pr);
+                                        } else if (ctx->vr_to_spill[o3->vr] == INVALID) {
+                                                remat(ctx, o3->vr, o3->pr);
+                                        } else {
+                                        // fprintf(stderr, "ERROR: o3 VR_TO_SPILL problem, something wrong with spill.\n");
                                         }
                                 // Otherwise, update o3's pr
                                 } else {
                                         o3->pr = pr3;
                                         ctx->prnu[pr3] = o3->nu;
                                 }
-                                break;
-                        case add:
-                        case sub:
-                        case mult:
-                        case lshift:
-                        case rshift:
-                                // op1
-                                o1 = &(line->op1);
-                                pr1 = ctx->vr_to_pr[o1->vr];
-                                // If pr invalid, restore
-                                if (pr1 == UINT32_MAX) {
-                                        o1->pr = get_a_pr(ctx, o1->vr, o1->nu, INVALID);
-                                        if (ctx->vr_to_spill[o1->vr] >= 32768) {
-                                                restore(ctx, o1->vr, o1->pr);
-                                        }
-                                // Otherwise, update o1's pr
-                                } else {
-                                        o1->pr = pr1;
-                                        ctx->prnu[pr1] = o1->nu;
-                                }
-                                // op2
-                                o2 = &(line->op2);
-                                pr2 = ctx->vr_to_pr[o2->vr];
-                                // If pr invalid, restore
-                                if (pr2 == UINT32_MAX) {
-                                        o2->pr = get_a_pr(ctx, o2->vr, o2->nu, o1->pr);
-                                        if (ctx->vr_to_spill[o2->vr] >= 32768) {
-                                                restore(ctx, o2->vr, o2->pr);
-                                        }
-                                // Otherwise, update o2's pr
-                                } else {
-                                        o2->pr = pr2;
-                                        ctx->prnu[pr2] = o2->nu;
-                                }
-                                break;
+                        }
                 }
 
                 // Check last uses for op1 and op2
@@ -489,7 +465,19 @@ void reallocate(Alloc_State* ctx, uint32_t max_vr) {
                         }
                 // Otherwise, allocate def for op3
                 } else {
-                        o3->pr = get_a_pr(ctx, o3->vr, o3->nu, INVALID);
+                        // loadI defs deferred until first use
+                        if (line->opcode == loadI) {
+                                ctx->vr_to_spill[o3->vr] = INVALID;
+                                ctx->vr_to_def[o3->vr] = line->op1.sr;
+                                temp = line->next;
+                                remove_line_new(&(ctx->ir->groups[1]), ctx->cur);
+                                add_line(ctx->ir->groups, ctx->cur);
+                                ctx->index++;
+                                ctx->cur = temp;
+                                continue;
+                        } else {
+                                o3->pr = get_a_pr(ctx, o3->vr, o3->nu, INVALID);
+                        }
                 }
 
                 // Next ILOC op
@@ -527,13 +515,18 @@ uint32_t get_a_pr(Alloc_State* ctx, uint32_t vr, uint32_t nu, uint32_t marked) {
                                 max_pr = i;
                         }
                 }
-                // Spill max_pr and update references
-                spill(ctx, max_pr);
+                // Spill max_pr and update references if valid
                 uint32_t temp = ctx->pr_to_vr[max_pr];
+                if ((ctx->vr_to_spill[temp] < 32768) && (ctx->vr_to_spill[temp] != INVALID)) {
+                        spill(ctx, max_pr);
+                }
+                // uint32_t temp = ctx->pr_to_vr[max_pr];
                 ctx->vr_to_pr[temp] = UINT32_MAX;
-                ctx->vr_to_spill[temp] = ctx->spill_adr;
-                // Allignment for new spill address
-                ctx->spill_adr += 4;
+                if ((ctx->vr_to_spill[temp] < 32768) && (ctx->vr_to_spill[temp] != INVALID)) {
+                        ctx->vr_to_spill[temp] = ctx->spill_adr;
+                        // Allignment for new spill address
+                        ctx->spill_adr += 4;
+                }
                 new_pr = max_pr;
         }
         ctx->vr_to_pr[vr] = new_pr;
@@ -610,11 +603,37 @@ void restore(Alloc_State* ctx, uint32_t vr, uint32_t nu) {
         remove_line(ctx->ir->groups);
         new_load->opcode = load;
         new_load->op1.pr = ctx->pr_count - 1;
-        // new_load->op3.vr = ctx->cur->op3.vr;
-        // new_load->op3.pr = ctx->cur->op3.pr;
         new_load->op3.vr = vr;
-        // TODO: Make sure vr_to_pr maps correctly here
         new_load->op3.pr = ctx->vr_to_pr[vr];
         new_load->op3.nu = ctx->index;
         add_line_after(rep, new_loadI, new_load);
+}
+
+void remat(Alloc_State* ctx, uint32_t vr, uint32_t pr) {
+        DummyHead* rep = &(ctx->ir->groups[1]);
+        struct IRLine* target;
+        target = ctx->cur->prev;
+
+        uint32_t val = ctx->vr_to_def[vr];
+
+        // Create a loadI to put spill location address into reserved register.
+        struct IRLine* new_loadI = get_next_IR(ctx->ir);
+        remove_line(ctx->ir->groups);
+        new_loadI->opcode = loadI;
+        new_loadI->op1.sr = val;
+        new_loadI->op1.vr = val;
+        new_loadI->op1.pr = val;
+        new_loadI->op3.pr = pr;
+        new_loadI->op3.nu = ctx->index;
+
+        if (target == (struct IRLine *) rep) {
+                target = ctx->cur;
+                new_loadI->next = target;
+                target->prev = new_loadI;
+                new_loadI->prev = (struct IRLine *) rep;
+                rep->oldest = new_loadI;
+                rep->line_count++;
+        } else {
+                add_line_after(rep, target, new_loadI);
+        }
 }
