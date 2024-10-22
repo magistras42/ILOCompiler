@@ -7,15 +7,18 @@
 void print_help() {
     printf("COMP Reference Allocator (Lab 2)\n");
     printf("Command Syntax:\n");
-    printf("\t412alloc [k] [-x] filename [-h]\n");
+    printf("\t412alloc [flags] filename \n");
     printf("\n");
     printf("Required Arguments:\n");
-    printf("\tk\t specifies the number of registers available to the allocator\n");
+    printf("\tk\t\tspecifies the number of registers available to the allocator and is in the range 3 <= k <= 64\n");
     printf("\tfilename\tis the path (absolute or relative) to the input file\n");
     printf("\n");
     printf("Optional Flags:\n");
     printf("\t-h\tprints this message\n");
     printf("\t-x\trenames registers and prints ILOC IR to command line\n");
+    printf("\t k\tscans and parses filename ILOC, renames registers, then\n");
+    printf("\t  \tallocates renames ILOC code into k physical registers,\n");
+    printf("\t  \twhere 3 <= k <= 64\n");
 }
 
 int main(int argc, char **argv) {
@@ -53,7 +56,7 @@ int main(int argc, char **argv) {
                     continue;
                 }
             }
-            fprintf(stderr, "ERROR: Bad arguments\n");
+            fprintf(stderr, "ERROR: Bad arguments.\n");
             hflag = 1;
             break;
         }
