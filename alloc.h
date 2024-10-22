@@ -9,19 +9,20 @@
 #include <stdlib.h>
 #include "scanparse.h"
 
-/* CONSTANTS */
-
 #ifndef ALLOC_H_INCLUDED
 #define ALLOC_H_INCLUDED
 
+/* CONSTANTS */
+
 #define INVALID 65
+#define ISREMAT 66
+#define ISSPILLED 67
+#define ISCLEAN 68
+
+/* MACROS */
 
 /* STRUCTS */
 
-// TODO: instead of array, maybe have stack struct
-
-// TODO: in rename, calc curr_live and max_live
-// TODO: do i do the 0 len thing or just double **???
 typedef struct {
     uint32_t total_lines; 
     uint32_t index;
@@ -34,6 +35,7 @@ typedef struct {
     uint32_t* pr_stack;
     uint32_t* vr_to_pr;
     uint32_t* vr_to_spill;
+    uint32_t* vr_to_def;
     StateIR* ir;
     struct IRLine* cur;
 } Alloc_State;
@@ -50,6 +52,7 @@ uint32_t get_a_pr(Alloc_State* ctx, uint32_t vr, uint32_t nu, uint32_t marked);
 void free_a_pr(Alloc_State* ctx, uint32_t pr);
 void spill(Alloc_State* ctx, uint32_t pr);
 void restore(Alloc_State* ctx, uint32_t vr, uint32_t nu);
+void remat(Alloc_State* ctx, uint32_t vr, uint32_t pr);
 
 /* ILOC IR REPRESENTATION CODE */
 void print_vr(StateIR* ir);
